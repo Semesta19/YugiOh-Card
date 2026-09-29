@@ -6,11 +6,21 @@ import {
   Loader2, 
   Share2, 
   Check,
-  X
+  X,
+  ImageDown
 } from 'lucide-react';
 import { toCanvas } from 'html-to-image';
 import { GeneratedYugiohCard, YugiohCardDna, ATTRIBUTE_CONFIG } from '../types/yugioh';
 import { toJapaneseName } from '../utils/japaneseTransliterate';
+import {
+  urlToBlob,
+  isTouchDevice,
+  canShareImageFile,
+  shareImageToGallery,
+  downloadBlob,
+  extensionForBlob,
+  safeFilename,
+} from '../utils/imageUtils';
 import { 
   renderFullCardToCanvas, 
   drawImageCover, 
@@ -48,7 +58,8 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
   
   // Mobile Gallery Save Modal state
   const [showGalleryModal, setShowGalleryModal] = useState(false);
-  const [galleryImageDataUrl, setGalleryImageDataUrl] = useState<string | null>(null);
+  const [galleryImage, setGalleryImage] = useState<{ url: string; blob: Blob; filename: string } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const frontCardRef = useRef<HTMLDivElement>(null);
@@ -225,17 +236,73 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
     setRotateY(0);
   };
 
+  // Tutup modal galeri & bersihkan blob URL
+  const closeGalleryModal = () => {
+    setShowGalleryModal(false);
+    setSaveStatus(null);
+    setGalleryImage((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+  };
+
+  /**
+   * Kirim hasil ke pengguna:
+   * - HP / tablet: buka modal dengan tombol "Simpan ke Galeri" (share sheet native).
+   *   Share sheet harus dipicu tap langsung, jadi tidak bisa otomatis setelah proses async.
+   * - Desktop: langsung download file.
+   */
+  const deliverImage = async (sourceUrl: string, baseSuffix: string) => {
+    const blob = await urlToBlob(sourceUrl);
+    const filename = safeFilename(activeName, baseSuffix, extensionForBlob(blob));
+
+    if (isTouchDevice()) {
+      setGalleryImage((prev) => {
+        if (prev) URL.revokeObjectURL(prev.url);
+        return { url: URL.createObjectURL(blob), blob, filename };
+      });
+      setSaveStatus(null);
+      setShowGalleryModal(true);
+    } else {
+      downloadBlob(blob, filename);
+    }
+  };
+
+  const handleSaveToGallery = async () => {
+    if (!galleryImage) return;
+    const result = await shareImageToGallery(galleryImage.blob, galleryImage.filename);
+    if (result === 'shared') {
+      setSaveStatus('Pilih "Simpan Gambar" / "Galeri" pada menu yang muncul.');
+    } else if (result === 'unsupported') {
+      // Browser tidak mendukung share file -> download biasa (masuk Downloads / Files)
+      downloadBlob(galleryImage.blob, galleryImage.filename);
+      setSaveStatus('Browser ini belum mendukung simpan langsung. Gambar diunduh; atau tekan lama gambar lalu pilih "Simpan ke Foto".');
+    } else if (result === 'failed') {
+      setSaveStatus('Gagal membuka menu simpan. Tekan lama pada gambar lalu pilih "Simpan ke Foto".');
+    }
+  };
+
+  const handleTouchCancel = () => {
+    touchStartRef.current = null;
+    setIsInteracting(false);
+    setIsHovered(false);
+    setRotateX(0);
+    setRotateY(0);
+  };
+
   // Download high-resolution PNG & Save to Mobile Gallery
   const handleDownload = async () => {
     if (!card?.imageUrl) return;
 
     if (viewMode === 'full-image') {
-      const link = document.createElement('a');
-      link.href = card.imageUrl;
-      link.download = `${activeName.replace(/\s+/g, '_')}_Yugioh_Artwork.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        setIsExporting(true);
+        await deliverImage(card.imageUrl, 'Yugioh_Artwork');
+      } catch (e) {
+        console.warn('Artwork export error:', e);
+      } finally {
+        setIsExporting(false);
+      }
       return;
     }
 
@@ -257,7 +324,8 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
           const exportCardEl = exportCardRef.current;
           const exportArtEl = exportArtworkRef.current;
 
-          const pixelRatio = 3;
+          // Pixel ratio 3 bisa terlalu berat di HP lama (batas ukuran canvas) -> 2 di perangkat sentuh
+          const pixelRatio = isTouchDevice() ? 2 : 3;
           const canvas = await toCanvas(exportCardEl, {
             pixelRatio,
             cacheBust: false,
@@ -325,33 +393,14 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
         });
       }
 
-      setGalleryImageDataUrl(finalDataUrl);
-
-      const filename = `${activeName.replace(/\s+/g, '_')}_Yugioh_Card.png`;
-
-      const link = document.createElement('a');
-      link.href = finalDataUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      const isTouchDevice =
-        typeof window !== 'undefined' &&
-        ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-      if (isTouchDevice) {
-        setShowGalleryModal(true);
-      }
+      await deliverImage(finalDataUrl, 'Yugioh_Card');
     } catch (e) {
       console.warn('Card export error, using image fallback:', e);
-      const link = document.createElement('a');
-      link.href = card.imageUrl;
-      link.download = `${activeName.replace(/\s+/g, '_')}_Yugioh.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setGalleryImageDataUrl(card.imageUrl);
-      setShowGalleryModal(true);
+      try {
+        await deliverImage(card.imageUrl, 'Yugioh');
+      } catch (fallbackErr) {
+        console.warn('Fallback export failed:', fallbackErr);
+      }
     } finally {
       setIsExporting(false);
     }
@@ -408,13 +457,14 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchCancel}
           style={{
             transform: `rotateX(${rotateX}deg) rotateY(${rotateY + (isFlipped ? 180 : 0)}deg)`,
             transformStyle: 'preserve-3d',
             transition: isInteracting
               ? 'none'
               : 'transform 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.25)',
-            touchAction: 'none',
+            touchAction: 'pan-y',
           }}
           className="relative w-[min(100%,320px)] sm:w-[350px] md:w-[380px] aspect-[59/86] rounded-[18px] cursor-pointer shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] group will-change-transform"
         >
@@ -671,14 +721,14 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
       )}
 
       {/* MOBILE GALLERY SAVE MODAL (iOS Glassmorphism) */}
-      {showGalleryModal && galleryImageDataUrl && (
+      {showGalleryModal && galleryImage && (
         <div
-          onClick={() => setShowGalleryModal(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xl animate-in fade-in"
+          onClick={closeGalleryModal}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-black/80 backdrop-blur-xl animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="ios-glass rounded-3xl max-w-sm w-full p-4 space-y-3 max-h-[92vh] overflow-y-auto"
+            className="ios-glass rounded-3xl max-w-sm w-full p-4 space-y-3 max-h-[92dvh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-white/10 pb-2">
               <h3 className="text-xs font-semibold text-white/90 uppercase tracking-wide font-serif">
@@ -686,39 +736,57 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
               </h3>
               <button
                 type="button"
-                onClick={() => setShowGalleryModal(false)}
-                className="w-7 h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white/70 hover:text-white flex items-center justify-center transition-colors"
+                onClick={closeGalleryModal}
+                aria-label="Tutup"
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white/70 hover:text-white flex items-center justify-center transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="flex justify-center p-1 bg-black/40 border border-white/10 rounded-2xl overflow-hidden shadow-inner">
+              {/* Tanpa select-none supaya tekan-lama -> "Simpan ke Foto" tetap bisa di iOS/Android */}
               <img
-                src={galleryImageDataUrl}
+                src={galleryImage.url}
                 alt={activeName}
-                className="max-h-[55vh] w-auto object-contain rounded-xl select-none"
+                className="max-h-[50dvh] w-auto max-w-full object-contain rounded-xl [-webkit-touch-callout:default]"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <a
-                href={galleryImageDataUrl}
-                download={`${activeName.replace(/\s+/g, '_')}_Yugioh_Card.png`}
-                className="py-2.5 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-zinc-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg transition-all font-serif"
+            <button
+              type="button"
+              onClick={handleSaveToGallery}
+              className="w-full py-3 px-3 min-h-[48px] rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 text-zinc-950 font-bold text-sm flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition-all font-serif"
+            >
+              <ImageDown className="w-4 h-4" />
+              <span>Simpan ke Galeri</span>
+            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => downloadBlob(galleryImage.blob, galleryImage.filename)}
+                className="py-2.5 px-3 min-h-[44px] rounded-xl bg-white/10 hover:bg-white/15 text-white/90 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Download PNG</span>
-              </a>
+                <span>Download</span>
+              </button>
 
               <button
                 type="button"
-                onClick={() => setShowGalleryModal(false)}
-                className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white/80 text-xs flex items-center justify-center transition-colors"
+                onClick={closeGalleryModal}
+                className="py-2.5 px-3 min-h-[44px] rounded-xl bg-white/10 hover:bg-white/15 text-white/80 text-xs flex items-center justify-center transition-colors"
               >
                 <span>Tutup</span>
               </button>
             </div>
+
+            <p className="text-[11px] leading-relaxed text-white/50 text-center">
+              {saveStatus ||
+                (canShareImageFile(galleryImage.blob, galleryImage.filename)
+                  ? 'Ketuk "Simpan ke Galeri", lalu pilih "Simpan Gambar" (iPhone) atau Galeri/Foto (Android).'
+                  : 'Tekan lama pada gambar, lalu pilih "Simpan ke Foto" / "Download gambar".')}
+            </p>
           </div>
         </div>
       )}

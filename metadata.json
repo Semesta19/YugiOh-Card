@@ -1,8 +1,0 @@
-{
-  "name": "Yugi-Oh Card Generator",
-  "description": "Generate premium Yu-Gi-Oh! collectible trading cards featuring your face and iconic monster archetypes",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}

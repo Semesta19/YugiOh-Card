@@ -95,10 +95,10 @@ export interface YugiohCardDna {
 }
 
 export interface YugiohGenerationSettings {
-  model: 'gemini-3-pro-image' | 'gemini-3.1-flash-image' | 'gemini-3.1-flash-lite-image';
+  model: 'gpt-image-2';
   facePriorityPercent: number; // default 33%
   aspectRatio: '2:3' | '63x88';
-  resolution: '1K' | '2K';
+  quality: 'low' | 'medium' | 'high'; // kualitas render gpt-image-2 (memengaruhi kecepatan & biaya)
   customCardName?: string; // e.g. "Aziz" or character name
   japaneseName?: string; // Japanese Katakana/Kanji for the title
   bottomCopyright?: string; // e.g. "©1996 KAZUKI TAKAHASHI" or "@2026 Bapack-Bapack DeadStar"

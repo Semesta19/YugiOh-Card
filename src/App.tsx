@@ -17,10 +17,11 @@ import {
   YugiohGenerationSettings,
   GeneratedYugiohCard,
 } from './types/yugioh';
-import { YUGIOH_CARD_PRESETS } from './data/yugiohCards';
+import { YUGIOH_CARD_PRESETS, createDefaultYugiohCardForName } from './data/yugiohCards';
 import { buildYugiohCardPrompt } from './utils/promptBuilder';
 import { toJapaneseName } from './utils/japaneseTransliterate';
 import { loadCardHistory, saveCardToStorage, clearCardStorage } from './utils/cardStorage';
+import { downscaleDataUrl } from './utils/imageUtils';
 import { Sparkles, AlertCircle } from 'lucide-react';
 
 export default function App() {
@@ -35,10 +36,10 @@ export default function App() {
 
   const [portraitImage, setPortraitImage] = useState<string | null>(null);
   const [settings, setSettings] = useState<YugiohGenerationSettings>({
-    model: 'gemini-3-pro-image',
+    model: 'gpt-image-2',
     facePriorityPercent: 33,
     aspectRatio: '2:3',
-    resolution: '1K',
+    quality: 'medium',
     customCardName: 'Dark Magician Girl',
     japaneseName: 'ブラック・マジシャン・ガール',
     bottomCopyright: '@2026 Bapack-bapack Deadstar',
@@ -49,6 +50,7 @@ export default function App() {
 
   const [cardImageUrl, setCardImageUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [isGeneratingDna, setIsGeneratingDna] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [history, setHistory] = useState<GeneratedYugiohCard[]>([]);
@@ -69,6 +71,19 @@ export default function App() {
       isMounted = false;
     };
   }, []);
+
+  // Timer kecil supaya pengguna tahu proses masih berjalan (gpt-image-2 bisa 30-120 detik)
+  useEffect(() => {
+    if (!isGenerating) {
+      setElapsedSec(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const id = window.setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [isGenerating]);
 
   const saveToHistory = (newCard: GeneratedYugiohCard) => {
     setHistory((prev) => [newCard, ...prev.slice(0, 29)]);
@@ -93,11 +108,31 @@ export default function App() {
     isolatedCardOnly: true,
   });
 
+  /** Baca JSON dengan aman; Vercel bisa membalas HTML/teks saat timeout atau body terlalu besar. */
+  const readApiResponse = async (response: Response) => {
+    const raw = await response.text();
+    try {
+      return JSON.parse(raw);
+    } catch {
+      if (response.status === 413) {
+        return { error: 'Foto terlalu besar. Coba foto lain yang lebih kecil.' };
+      }
+      if (response.status === 504 || response.status === 408) {
+        return { error: 'Server kehabisan waktu. Coba turunkan kualitas ke Rendah/Standar lalu generate ulang.' };
+      }
+      return { error: `Server mengembalikan respons tidak valid (status ${response.status}).` };
+    }
+  };
+
   const handleGenerateCard = async () => {
+    if (isGenerating) return;
     setIsGenerating(true);
     setErrorMessage(null);
 
     try {
+      // Perkecil foto dulu agar aman dari batas body 4,5 MB di Vercel
+      const portraitForUpload = portraitImage ? await downscaleDataUrl(portraitImage) : null;
+
       const response = await fetch('/api/generate-card', {
         method: 'POST',
         headers: {
@@ -105,17 +140,17 @@ export default function App() {
         },
         body: JSON.stringify({
           prompt: compiledPrompt,
-          image: portraitImage,
-          model: settings.model,
-          imageSize: settings.resolution,
+          image: portraitForUpload,
+          quality: settings.quality,
           aspectRatio: settings.generationTarget === 'full-card' ? '2:3' : '1:1',
         }),
       });
 
-      const data = await response.json();
+      const data = await readApiResponse(response);
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Gagal menghasilkan kartu Yu-Gi-Oh!');
+        const msg = data.error || 'Gagal menghasilkan kartu Yu-Gi-Oh!';
+        throw new Error(data.hint ? `${msg} — ${data.hint}` : msg);
       }
 
       setCardImageUrl(data.imageUrl);
@@ -144,29 +179,36 @@ export default function App() {
   const handleCustomGenerateDna = async (name: string) => {
     setIsGeneratingDna(true);
     setErrorMessage(null);
+
+    const applyDna = (dna: YugiohCardDna) => {
+      setCurrentDna(dna);
+      setCardDisplayName(dna.name);
+      setJapaneseName(toJapaneseName(dna.name));
+    };
+
     try {
       const response = await fetch('/api/generate-dna', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pokemonName: name }),
+        body: JSON.stringify({ characterName: name }),
       });
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Gagal meracik data kartu.');
+      const data = await readApiResponse(response);
+      if (response.ok && data.success && data.dna) {
+        applyDna(data.dna);
+      } else {
+        // AI tidak tersedia -> pakai generator lokal agar fitur tetap jalan
+        applyDna(createDefaultYugiohCardForName(name));
       }
-      setCurrentDna(data.dna);
-      setCardDisplayName(data.dna.name);
-      setJapaneseName(toJapaneseName(data.dna.name));
     } catch (err: any) {
-      console.error('DNA generation error:', err);
-      setErrorMessage(err.message || 'Gagal meracik data kartu.');
+      console.warn('DNA generation error, using local generator:', err);
+      applyDna(createDefaultYugiohCardForName(name));
     } finally {
       setIsGeneratingDna(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#09090d] text-zinc-100 flex flex-col font-sans antialiased relative overflow-x-hidden selection:bg-amber-400/30 selection:text-amber-200">
+    <div className="min-h-dvh bg-[#09090d] text-zinc-100 flex flex-col font-sans antialiased relative overflow-x-hidden selection:bg-amber-400/30 selection:text-amber-200">
       {/* iOS Ambient Mesh Glows */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-amber-500/[0.07] blur-[120px]" />
@@ -280,7 +322,7 @@ export default function App() {
               {isGenerating ? (
                 <>
                   <div className="w-4 h-4 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
-                  <span>Memproses...</span>
+                  <span>Memproses… {elapsedSec}d</span>
                 </>
               ) : (
                 <>
