@@ -37,6 +37,23 @@ function extFromMime(mime: string): string {
   return 'jpg';
 }
 
+/**
+ * Arahan pose acak (dipilih server tiap generate). Wajah selalu tetap terlihat jelas
+ * (tanpa profil penuh) supaya identitas tidak hilang.
+ */
+const POSES = [
+  'three-quarter view, head turned about 30 degrees toward the viewer\'s left, shoulders angled, eyes looking back at the camera',
+  'three-quarter view, head turned about 30 degrees toward the viewer\'s right, shoulders angled, eyes looking back at the camera',
+  'head tilted slightly to one side with the chin lowered, intense gaze looking up toward the camera, shoulders turned',
+  'low-angle heroic shot, chin slightly raised, head turned a little to the left, confident commanding look',
+  'looking over one shoulder toward the camera, head turned about 35 degrees, one hand raised casting a spell near the shoulder',
+  'dynamic three-quarter view leaning slightly toward the camera, head turned to the right with a subtle head tilt, fierce focused eyes',
+];
+
+function pickPose(): string {
+  return POSES[Math.floor(Math.random() * POSES.length)];
+}
+
 function friendlyOpenAIError(status: number, payload: any) {
   const raw: string = payload?.error?.message || `OpenAI mengembalikan status ${status}.`;
   const code: string = payload?.error?.code || '';
@@ -66,6 +83,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const { prompt, image, aspectRatio = '1:1' } = body ?? {};
+  const freePose = body?.poseMode !== 'front';
   const quality: Quality = VALID_QUALITY.includes(body?.quality) ? body.quality : 'medium';
 
   if (!prompt || typeof prompt !== 'string') {
@@ -89,10 +107,18 @@ export async function POST(request: Request): Promise<Response> {
 
   let finalPrompt: string = prompt;
   if (hasPortrait) {
-    finalPrompt = `[INPUT IMAGE 1: FACIAL IDENTITY REFERENCE PHOTO]
+    const pose = pickPose();
+    finalPrompt = `[INPUT IMAGE 1: FACIAL IDENTITY REFERENCE PHOTO${freePose ? ' - IDENTITY ONLY' : ''}]
 CRITICAL MANDATE: Lock the identity of the face in this attached reference photo with 100% precision. The face MUST be rendered as an authentic, photorealistic human photograph with natural skin pores, natural eyes, and exact facial likeness. ABSOLUTELY NO 3D / CGI, NO CARTOON, NO ANIME.
-
-${prompt}`;
+${
+  freePose
+    ? `
+USE THE PHOTO FOR IDENTITY ONLY (facial features, bone structure, eyes, nose, lips, skin tone, age). Do NOT copy its head angle, gaze direction, expression, body pose, framing, crop, lighting, background or clothing. Re-pose the SAME person in a new dynamic angle. The face must stay fully visible and instantly recognizable (no full profile, no hidden face).
+`
+    : ''
+}
+${prompt}
+${freePose ? `\nPOSE DIRECTIVE (overrides any pose wording above and must NOT match the reference photo's pose): ${pose}.` : ''}`;
   }
 
   try {

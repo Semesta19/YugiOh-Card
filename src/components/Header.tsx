@@ -7,6 +7,15 @@ interface HeaderProps {
   onUpdateSettings: (newSettings: Partial<YugiohGenerationSettings>) => void;
 }
 
+const POSE_OPTIONS: {
+  value: NonNullable<YugiohGenerationSettings['poseMode']>;
+  label: string;
+  desc: string;
+}[] = [
+  { value: 'auto', label: 'Bebas', desc: 'Wajah sama, angle & pose menyesuaikan' },
+  { value: 'front', label: 'Sesuai foto', desc: 'Ikuti pose & arah wajah foto' },
+];
+
 const QUALITY_OPTIONS: {
   value: YugiohGenerationSettings['quality'];
   label: string;
@@ -56,7 +65,32 @@ export const Header: React.FC<HeaderProps> = ({ settings, onUpdateSettings }) =>
             <>
               {/* Overlay: tap di luar untuk menutup */}
               <div className="fixed inset-0 z-40" onClick={() => setShowSettingsDropdown(false)} />
-              <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl ios-glass border border-white/10 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100 space-y-1">
+              <div className="absolute right-0 mt-2 w-72 max-w-[calc(100vw-1.5rem)] max-h-[80dvh] overflow-y-auto rounded-2xl ios-glass border border-white/10 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100 space-y-1">
+                <p className="px-2.5 pt-1 pb-1.5 text-[10px] uppercase tracking-wider text-white/40 font-mono">
+                  Pose & angle wajah
+                </p>
+                {POSE_OPTIONS.map((opt) => {
+                  const active = (settings.poseMode || 'auto') === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => onUpdateSettings({ poseMode: opt.value })}
+                      className={`w-full text-left p-2.5 min-h-[44px] rounded-xl text-xs transition-all flex items-center justify-between gap-2 ${
+                        active
+                          ? 'bg-amber-400/15 text-white font-medium border border-amber-400/30'
+                          : 'hover:bg-white/[0.06] text-white/70 hover:text-white'
+                      }`}
+                    >
+                      <span className="flex flex-col">
+                        <span className="font-semibold">{opt.label}</span>
+                        <span className="text-[10px] text-white/45">{opt.desc}</span>
+                      </span>
+                      {active && <Check className="w-4 h-4 text-amber-400 flex-shrink-0" />}
+                    </button>
+                  );
+                })}
+                <div className="my-1 border-t border-white/10" />
                 <p className="px-2.5 pt-1 pb-1.5 text-[10px] uppercase tracking-wider text-white/40 font-mono">
                   Kualitas render
                 </p>

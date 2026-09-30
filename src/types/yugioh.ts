@@ -98,6 +98,7 @@ export interface YugiohGenerationSettings {
   model: 'gpt-image-2';
   facePriorityPercent: number; // default 33%
   aspectRatio: '2:3' | '63x88';
+  poseMode?: 'auto' | 'front'; // auto = identitas dikunci, pose/angle bebas | front = ikuti pose foto
   quality: 'low' | 'medium' | 'high'; // kualitas render gpt-image-2 (memengaruhi kecepatan & biaya)
   customCardName?: string; // e.g. "Aziz" or character name
   japaneseName?: string; // Japanese Katakana/Kanji for the title

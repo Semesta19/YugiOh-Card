@@ -39,6 +39,7 @@ export default function App() {
     model: 'gpt-image-2',
     facePriorityPercent: 33,
     aspectRatio: '2:3',
+    poseMode: 'auto',
     quality: 'medium',
     customCardName: 'Dark Magician Girl',
     japaneseName: 'ブラック・マジシャン・ガール',
@@ -142,6 +143,7 @@ export default function App() {
           prompt: compiledPrompt,
           image: portraitForUpload,
           quality: settings.quality,
+          poseMode: settings.poseMode || 'auto',
           aspectRatio: settings.generationTarget === 'full-card' ? '2:3' : '1:1',
         }),
       });

@@ -17,6 +17,8 @@ export function buildYugiohCardPrompt(
   const setCode = card.cardSetCode || 'SS01-ENA04';
   const passcode = card.cardPasscode || '38033121';
   const targetMode = settings?.generationTarget || 'artwork';
+  const poseMode = settings?.poseMode || 'auto';
+  const freePose = poseMode !== 'front';
 
   const effectLore =
     (card.effectText !== undefined && card.effectText !== null && card.effectText !== '')
@@ -41,12 +43,13 @@ CRITICAL TOP-PRIORITY INSTRUCTION: ABSOLUTE PHOTOREALISM & 100% IDENTITY LOCK
   * Exact eye shape, eyelid creases, epicanthic folds, iris color, pupil size, eye spacing, and authentic gaze.
   * Exact eyebrow structure: shape, arch, density, color, and natural hair pattern.
   * Exact nose structure: bridge width, nostril contours, and nose tip shape.
-  * Exact mouth and lips: lip fullness, lip contour, mouth width, and exact smile or facial expression from the photo.
+  * Exact mouth and lips: lip fullness, lip contour, mouth width, and the natural shape of the smile lines.
   * Exact facial geometry and bone structure: jawline, cheekbones, chin contour, forehead, and natural proportions.
   * Exact natural skin complexion, undertone, and any unique facial marks (moles, freckles, beauty marks).
 - Biometric verification match: A facial recognition algorithm and friends/family must identify the person with 100% certainty.
 - ZERO facial morphing, ZERO facial blending with anime/fictional characters, ZERO face swapping. The person's real face must be preserved with absolute fidelity.
-
+${freePose ? `- IDENTITY IS NOT POSE: The identity lock applies ONLY to facial features (eyes, brows, nose, lips, jaw, skin tone, marks). It does NOT lock the head angle, gaze direction, expression, body pose, camera angle, crop, lighting, background or clothing of the uploaded photo. RE-POSE the same person in a NEW dynamic angle (three-quarter view / head tilt / turned shoulders) while keeping the face fully visible and instantly recognizable. Do NOT reproduce the uploaded photo's frontal pose.
+` : ''}
 2. ABSOLUTE PHOTOREALISM — STRICT BAN ON 3D / CGI & CARTOON / ANIME ("TANPA DIUBAH JADI 3D ATAU KARTUN"):
 - The face MUST be rendered as an authentic, high-resolution REAL-LIFE HUMAN PHOTOGRAPH.
 - Natural human skin texture: micro-pores, fine epidermal details, realistic skin subsurface scattering (SSS), natural skin translucency, real eyelid creases, authentic human lip texture and lines, natural eye moisture and realistic corneal reflections/catchlights.
@@ -66,7 +69,7 @@ CRITICAL TOP-PRIORITY INSTRUCTION: ABSOLUTE PHOTOREALISM & 100% IDENTITY LOCK
 4. COMPOSITION: FACE DOMINANT 1/3 OF FRAME ("WAJAH DOMINAN 1/3 DARI GAMBAR"):
 - Framing: Cinematic bust / head-and-shoulders close-up portrait.
 - The realistic face of the person is the dominant central focal point, occupying approximately 1/3 (one-third) of the entire image area.
-- Pose: Dynamic head-and-shoulders portrait facing the viewer with confident, heroic presence fitting a Yu-Gi-Oh! champion.
+${freePose ? '- Pose: FREE and DYNAMIC heroic head-and-shoulders portrait with a NEW head angle and body orientation (see POSE DIRECTIVE), confident presence fitting a Yu-Gi-Oh! champion. Do NOT copy the pose of the uploaded photo.' : '- Pose: Dynamic head-and-shoulders portrait facing the viewer with confident, heroic presence fitting a Yu-Gi-Oh! champion.'}
 
 5. PRACTICAL COSTUME & CHARACTER MOTIFS (${characterName} - ${card.name}):
 - The Yu-Gi-Oh! fantasy theme is achieved through physical live-action costume, ornate armor, headwear/hat, weapons, and arcane effects worn by this real person.
@@ -125,13 +128,14 @@ CRITICAL COMPOSITION & VISUAL SPECIFICATIONS (MATCHING REFERENCE CARD)
   * The face MUST be an exact 100% biometric likeness to the person in the uploaded photo.
   * Retain exact eye contours, eyelid creases, iris color, nose bridge & tip, mouth, lip fullness, smile lines, jawline, chin, and natural skin tone.
   * ZERO morphing or altering facial features. The real person must be instantly recognized.
-- ABSOLUTE PHOTOREALISM — STRICT BAN ON 3D / CGI & CARTOON / ANIME:
+${freePose ? `  * IDENTITY IS NOT POSE: lock only the facial features. Head angle, gaze, expression, body pose and camera angle must be NEW and dynamic (three-quarter view / head tilt / turned shoulders), NOT copied from the uploaded photo. The face stays fully visible.
+` : ''}- ABSOLUTE PHOTOREALISM — STRICT BAN ON 3D / CGI & CARTOON / ANIME:
   * The face MUST be rendered as an authentic, crisp REAL HUMAN PHOTOGRAPH with natural skin pores, epidermal micro-texture, fine lines, subsurface scattering, and natural iris reflections.
   * ABSOLUTELY FORBIDDEN: NO 3D model, NO CGI, NO Octane render, NO video game character, NO Pixar/Disney 3D, NO 2D anime, NO cartoon, NO cel-shaded drawing.
   * A real living human captured by an 85mm portrait camera lens, wearing high-end movie-quality physical costume and armor.
 - COMPOSITION: FACE DOMINANT 1/3 OF ARTWORK FRAME:
   * The realistic face of the uploaded person is the prominent central focal point, occupying approximately 1/3 (one-third) of the entire artwork window area.
-  * Framing: Bust / head-and-shoulders close-up composition (face, head, neck, shoulders, and upper chest) matching the iconic Dark Magician Girl card pose.
+  * Framing: Bust / head-and-shoulders close-up composition (face, head, neck, shoulders, and upper chest) ${freePose ? 'in a NEW dynamic pose and head angle (NOT copied from the uploaded photo), with heroic Yu-Gi-Oh! presence.' : 'matching the iconic Dark Magician Girl card pose.'}
 - COSTUME & MOTIFS (${characterName}):
   * Headpiece: Iconic curved peaked wizard hat (blue with magenta trim and side spiral curls) framing the realistic human face.
   * Hairstyle: Long flowing hair (${card.hairstyle}) naturally framing the face and shoulders.
