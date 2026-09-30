@@ -109,12 +109,25 @@
 }
 
 /* ===== Responsive / mobile fixes ===== */
-html,
-body {
-  min-height: 100%;
-  overflow-x: hidden;
+html {
+  background-color: #09090d; /* area rubber-band / overscroll tetap gelap, bukan putih */
+  color-scheme: dark;
+  overscroll-behavior-y: none; /* matikan pull-to-refresh & bounce yang membuka area putih */
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100%;
+  background-color: #09090d;
+  overscroll-behavior-y: none;
+  /* clip (bukan hidden) supaya body tidak menjadi scroll-container ganda di iOS */
+  overflow-x: clip;
+}
+
+#root {
+  min-height: 100dvh;
+  background-color: #09090d;
 }
 
 /* iOS Safari zoom otomatis saat fokus input jika font < 16px */
@@ -140,5 +153,16 @@ video {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Layar sentuh: blend color-dodge + animasi di dalam elemen 3D = kedip/glitch di Safari & Chrome HP.
+   Ganti dengan kilau statis yang ringan. */
+@media (hover: none) {
+  .secret-rare-foil,
+  .holo-overlay {
+    mix-blend-mode: normal;
+    animation: none;
+    opacity: 0.16;
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Download, 
   RotateCw, 
@@ -12,6 +12,7 @@ import {
 import { toCanvas } from 'html-to-image';
 import { GeneratedYugiohCard, YugiohCardDna, ATTRIBUTE_CONFIG } from '../types/yugioh';
 import { toJapaneseName } from '../utils/japaneseTransliterate';
+import { useCardTilt } from '../hooks/useCardTilt';
 import {
   urlToBlob,
   isTouchDevice,
@@ -51,21 +52,22 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
   const [showShareToast, setShowShareToast] = useState(false);
   const [viewMode, setViewMode] = useState<'frame' | 'full-image'>('frame');
   const [isExporting, setIsExporting] = useState(false);
-  const [rotateX, setRotateX] = useState(0);
-  const [rotateY, setRotateY] = useState(0);
-  const [isInteracting, setIsInteracting] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
+  // Tilt & flip: transform ditulis langsung ke elemen (tanpa re-render), tap sungguhan saja yang flip
+  const {
+    cardRef,
+    isHovered,
+    resetTilt,
+    handlers: tiltHandlers,
+  } = useCardTilt(isFlipped, () => setIsFlipped((prev) => !prev));
   
   // Mobile Gallery Save Modal state
   const [showGalleryModal, setShowGalleryModal] = useState(false);
   const [galleryImage, setGalleryImage] = useState<{ url: string; blob: Blob; filename: string } | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
-  const cardRef = useRef<HTMLDivElement>(null);
   const frontCardRef = useRef<HTMLDivElement>(null);
   const exportCardRef = useRef<HTMLDivElement>(null);
   const exportArtworkRef = useRef<HTMLDivElement>(null);
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   const activeName = (cardDisplayName?.trim() || currentDna.name || '').trim();
   const effectiveJpName = (
@@ -158,83 +160,15 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
 
   const frameTheme = getFrameTheme();
 
-  // Mouse 3D perspective tilt (desktop cursor)
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-
-    const maxRotation = 14;
-    const rotX = -((y - centerY) / centerY) * maxRotation;
-    const rotY = ((x - centerX) / centerX) * maxRotation;
-
-    setRotateX(Math.max(-20, Math.min(20, rotX)));
-    setRotateY(Math.max(-20, Math.min(20, rotY)));
-  };
-
-  const handleMouseEnter = () => setIsHovered(true);
-  const handleMouseLeave = () => {
-    setIsHovered(false);
-    setRotateX(0);
-    setRotateY(0);
-  };
-
-  // TOUCH GESTURE HANDLERS (Mobile / iPad finger touch tilt, NO card dragging/displacement)
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length !== 1 || !cardRef.current) return;
-    const touch = e.touches[0];
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
-    setIsInteracting(true);
-    setIsHovered(true);
-
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-
-    const maxRotation = 16;
-    const rotX = -((y - centerY) / centerY) * maxRotation;
-    const rotY = ((x - centerX) / centerX) * maxRotation;
-
-    setRotateX(Math.max(-22, Math.min(22, rotX)));
-    setRotateY(Math.max(-22, Math.min(22, rotY)));
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length !== 1 || !cardRef.current) return;
-    const touch = e.touches[0];
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-
-    const maxRotation = 16;
-    const rotX = -((y - centerY) / centerY) * maxRotation;
-    const rotY = ((x - centerX) / centerX) * maxRotation;
-
-    setRotateX(Math.max(-22, Math.min(22, rotX)));
-    setRotateY(Math.max(-22, Math.min(22, rotY)));
-  };
-
-  const handleTouchEnd = () => {
-    const start = touchStartRef.current;
-    touchStartRef.current = null;
-    setIsInteracting(false);
-    setIsHovered(false);
-
-    // Quick tap toggles card flip
-    if (start && Date.now() - start.time < 250) {
-      setIsFlipped((prev) => !prev);
-    }
-
-    setRotateX(0);
-    setRotateY(0);
-  };
+  // Kunci scroll halaman saat modal simpan-galeri terbuka
+  useEffect(() => {
+    if (!showGalleryModal) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [showGalleryModal]);
 
   // Tutup modal galeri & bersihkan blob URL
   const closeGalleryModal = () => {
@@ -282,14 +216,6 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
     }
   };
 
-  const handleTouchCancel = () => {
-    touchStartRef.current = null;
-    setIsInteracting(false);
-    setIsHovered(false);
-    setRotateX(0);
-    setRotateY(0);
-  };
-
   // Download high-resolution PNG & Save to Mobile Gallery
   const handleDownload = async () => {
     if (!card?.imageUrl) return;
@@ -308,9 +234,7 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
 
     try {
       setIsExporting(true);
-      setRotateX(0);
-      setRotateY(0);
-      setIsHovered(false);
+      resetTilt();
 
       let finalDataUrl = '';
 
@@ -451,22 +375,14 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
       >
         <div
           ref={cardRef}
-          onMouseMove={handleMouseMove}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchCancel}
+          {...tiltHandlers}
           style={{
-            transform: `rotateX(${rotateX}deg) rotateY(${rotateY + (isFlipped ? 180 : 0)}deg)`,
             transformStyle: 'preserve-3d',
-            transition: isInteracting
-              ? 'none'
-              : 'transform 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.25)',
             touchAction: 'pan-y',
+            WebkitTouchCallout: 'none',
+            WebkitTapHighlightColor: 'transparent',
           }}
-          className="relative w-[min(100%,320px)] sm:w-[350px] md:w-[380px] aspect-[59/86] rounded-[18px] cursor-pointer shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] group will-change-transform"
+          className="relative w-[min(100%,320px)] sm:w-[350px] md:w-[380px] aspect-[59/86] rounded-[18px] cursor-pointer shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] group select-none"
         >
           {/* FRONT OF YU-GI-OH! CARD */}
           {viewMode === 'full-image' && card?.imageUrl ? (
@@ -475,6 +391,8 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
               className="absolute inset-0 rounded-[18px] overflow-hidden bg-black flex items-center justify-center shadow-2xl border-2 border-amber-600/60"
               style={{
                 backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden',
+                transform: 'translateZ(1px)',
                 boxShadow: isHovered
                   ? `0 0 35px ${attrInfo.glow}, 0 20px 40px rgba(0,0,0,0.8)`
                   : '0 10px 30px rgba(0,0,0,0.6)',
@@ -492,9 +410,11 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
             /* AUTHENTIC TCG CARD FRAME */
             <div
               ref={frontCardRef}
-              className={`absolute inset-0 rounded-[18px] p-2.5 sm:p-3 overflow-hidden border-2 ${frameTheme.border} ${frameTheme.outerBg} flex flex-col justify-between shadow-2xl transition-all duration-300 font-serif`}
+              className={`absolute inset-0 rounded-[18px] p-2.5 sm:p-3 overflow-hidden border-2 ${frameTheme.border} ${frameTheme.outerBg} flex flex-col justify-between shadow-2xl transition-shadow duration-300 font-serif`}
               style={{
                 backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden',
+                transform: 'translateZ(1px)',
                 boxShadow: isExporting
                   ? 'none'
                   : isHovered
@@ -633,12 +553,13 @@ export const CardDisplay: React.FC<CardDisplayProps> = ({
             className="absolute inset-0 rounded-[18px] p-3 overflow-hidden bg-[#24130a] border-4 border-[#3b1e10] flex flex-col items-center justify-center shadow-2xl"
             style={{
               backfaceVisibility: 'hidden',
-              transform: 'rotateY(180deg)',
+              WebkitBackfaceVisibility: 'hidden',
+              transform: 'rotateY(180deg) translateZ(1px)',
             }}
           >
             <div className="w-[88%] h-[92%] rounded-xl border-2 border-[#542d17] bg-gradient-to-br from-[#170a04] via-[#3a1a09] to-[#0f0602] relative overflow-hidden flex flex-col items-center justify-center shadow-inner">
-              <div className="absolute w-44 h-44 rounded-full border border-amber-500/20 animate-spin [animation-duration:30s]" />
-              <div className="absolute w-32 h-32 rounded-full border border-amber-500/30 animate-spin [animation-duration:20s]" />
+              <div className={`absolute w-44 h-44 rounded-full border border-amber-500/20 animate-spin [animation-duration:30s] ${isFlipped ? '' : '[animation-play-state:paused]'}`} />
+              <div className={`absolute w-32 h-32 rounded-full border border-amber-500/30 animate-spin [animation-duration:20s] ${isFlipped ? '' : '[animation-play-state:paused]'}`} />
               <div className="absolute w-20 h-20 rounded-full border border-amber-400/40" />
 
               <div className="relative z-10 px-4 py-2 rounded-lg bg-black/80 border border-amber-500/60 shadow-xl flex flex-col items-center">

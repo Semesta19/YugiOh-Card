@@ -208,12 +208,12 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-dvh bg-[#09090d] text-zinc-100 flex flex-col font-sans antialiased relative overflow-x-hidden selection:bg-amber-400/30 selection:text-amber-200">
+    <div className="min-h-dvh bg-[#09090d] text-zinc-100 flex flex-col font-sans antialiased relative overflow-x-clip selection:bg-amber-400/30 selection:text-amber-200">
       {/* iOS Ambient Mesh Glows */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-amber-500/[0.07] blur-[120px]" />
-        <div className="absolute top-[20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-purple-600/[0.06] blur-[140px]" />
-        <div className="absolute bottom-[-10%] left-[20%] w-[550px] h-[550px] rounded-full bg-blue-600/[0.05] blur-[130px]" />
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-amber-500/[0.07] blur-[70px] md:blur-[120px]" />
+        <div className="absolute top-[20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-purple-600/[0.06] blur-[80px] md:blur-[140px]" />
+        <div className="absolute bottom-[-10%] left-[20%] w-[550px] h-[550px] rounded-full bg-blue-600/[0.05] blur-[75px] md:blur-[130px]" />
       </div>
 
       {/* Header */}
